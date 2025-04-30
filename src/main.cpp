@@ -1,33 +1,35 @@
 #include <Arduino.h>
 #include "lib/MPU6050_Reading.h" // Adjust the path as necessary
-#include "lib/Motor_Control.h" // Adjust the path as necessary
-#include "lib/mqtt_helper.h" // Adjust the path as necessary
+#include "lib/Motor_Control.h"   // Adjust the path as necessary
+#include "lib/mqtt_helper.h"     // Adjust the path as necessary
+#include <WiFi.h>                // Include Wi-Fi library
 
 #define ON_TRACK_PIN 15 // Pin to read the state of the ON_TRACK signal
-#define MOTOR_PIN1 13 // Pin for motor control (example pin, adjust as necessary)
-#define MOTOR_PIN2 12 // Pin for motor control (example pin, adjust as necessary)
+#define MOTOR_PIN1 13   // Pin for motor control (example pin, adjust as necessary)
+#define MOTOR_PIN2 12   // Pin for motor control (example pin, adjust as necessary)
+
+#define WIFI_SSID "mec_midnight_sun"       // Replace with your Wi-Fi SSID
+#define WIFI_PASSWORD "workIsnever*0ver8924" // Replace with your Wi-Fi password
 
 #define MQTT_SERVER "mqtt.example.com" // Example MQTT server, adjust as necessary
-#define MQTT_PORT 1883 // Example MQTT port, adjust as necessary  
-#define MQTT_CLIENT_ID "client_id" // Example MQTT client ID, adjust as necessary
-#define MQTT_TOPIC "sensor/data" // Example MQTT topic, adjust as necessary
-#define MQTT_USERNAME "username" // Example MQTT username, adjust as necessary
-#define MQTT_PASSWORD "password" // Example MQTT password, adjust as necessary
-#define MQTT_QOS 0 // Example MQTT QoS level, adjust as necessary
-#define MQTT_RETAINED false // Example MQTT retained message flag, adjust as necessary
-
+#define MQTT_PORT 1883                // Example MQTT port, adjust as necessary
+#define MQTT_CLIENT_ID "client_id"    // Example MQTT client ID, adjust as necessary
+#define MQTT_TOPIC "sensor/data"      // Example MQTT topic, adjust as necessary
+#define MQTT_USERNAME "username"      // Example MQTT username, adjust as necessary
+#define MQTT_PASSWORD "password"      // Example MQTT password, adjust as necessary
+#define MQTT_QOS 0                    // Example MQTT QoS level, adjust as necessary
+#define MQTT_RETAINED false           // Example MQTT retained message flag, adjust as necessary
 
 MPU6050_Reading sensor;
 MotorControl motor(MOTOR_PIN1, MOTOR_PIN2); // Example motor pins, adjust as necessary
-int motorSpeed = 0; // Variable to store motor speed
+int motorSpeed = 0;                         // Variable to store motor speed
 MqttHelper mqtt(MQTT_SERVER, 1883, MQTT_CLIENT_ID); // Example MQTT server and client ID, adjust as necessary
 
 void setSpeedByPercent(int inputSpeedPercent); // Function prototype for setting motor speed
-void printSensorData(); // Function prototype for printing sensor data
-void onTrackSafety(); // Function prototype for printing ON_TRACK state
-bool isOnTrack(); // Function prototype for checking ON_TRACK state
-
-
+void printSensorData();                        // Function prototype for printing sensor data
+void onTrackSafety();                          // Function prototype for printing ON_TRACK state
+bool isOnTrack();                              // Function prototype for checking ON_TRACK state
+void connectToWiFi();                          // Function prototype for Wi-Fi connection
 
 void setup() {
   // Initialize Serial communication for debugging
@@ -36,16 +38,17 @@ void setup() {
     delay(10); // Wait for Serial to initialize
   }
 
+  // Connect to Wi-Fi
+  // connectToWiFi();
+
   // Initialize the MPU6050 sensor
   sensor.begin();
   Serial.println("MPU6050 initialized successfully.");
 
   pinMode(ON_TRACK_PIN, INPUT_PULLDOWN); // Set ON_TRACK pin as input
-
 }
 
 void loop() {
-  
   onTrackSafety(); // Check ON_TRACK signal and control motor accordingly
   // printSensorData();
 
@@ -58,13 +61,23 @@ void loop() {
       Serial.println("Invalid speed. Enter a value between 0 and 100.");
     }
   }
+}
 
-  
+void connectToWiFi() {
+  Serial.print("Connecting to Wi-Fi...");
+  // WiFi.mode(WIFI_STA); // Set Wi-Fi mode to Station
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
 
+  // Wait for connection
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
 
-  // Print motor speed for debugging
-  // Serial.print("Current Motor Speed: ");
-  // Serial.println(motorSpeed);
+  Serial.println();
+  Serial.println("Wi-Fi connected.");
+  Serial.print("IP Address: ");
+  Serial.println(WiFi.localIP());
 }
 
 void publishSensorDataToMQTT() {
@@ -112,6 +125,9 @@ void onTrackSafety() {
 
     if (onTrackState) {
       Serial.println("ON_TRACK signal is HIGH. Motor is ON.");
+      // Delay to allow the motor to start
+      delay(1000); // Adjust the delay as necessary
+           
     } else {
       Serial.println("ON_TRACK signal is LOW. Motor is OFF.");
       motor.stop(); // Stop the motor if ON_TRACK signal is LOW
@@ -119,8 +135,7 @@ void onTrackSafety() {
   }
 }
 
-void printSensorData()
-{
+void printSensorData() {
   // Read data from the MPU6050 sensor
   sensor.readSensor();
   Serial.print("Acceleration X: ");
@@ -143,8 +158,7 @@ void printSensorData()
   Serial.println(" °/s");
 }
 
-void setSpeedByPercent(int inputSpeedPercent)
-{
+void setSpeedByPercent(int inputSpeedPercent) {
   motorSpeed = map(inputSpeedPercent, 0, 100, 0, 255); // Map percentage to 0-255 range
   motor.forward(motorSpeed);                           // Set motor speed
   Serial.print("Motor Speed set to: ");
