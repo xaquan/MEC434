@@ -1,14 +1,26 @@
 #include <Arduino.h>
 #include "lib/MPU6050_Reading.h" // Adjust the path as necessary
 #include "lib/Motor_Control.h" // Adjust the path as necessary
+#include "lib/mqtt_helper.h" // Adjust the path as necessary
 
 #define ON_TRACK_PIN 15 // Pin to read the state of the ON_TRACK signal
 #define MOTOR_PIN1 13 // Pin for motor control (example pin, adjust as necessary)
 #define MOTOR_PIN2 12 // Pin for motor control (example pin, adjust as necessary)
 
+#define MQTT_SERVER "mqtt.example.com" // Example MQTT server, adjust as necessary
+#define MQTT_PORT 1883 // Example MQTT port, adjust as necessary  
+#define MQTT_CLIENT_ID "client_id" // Example MQTT client ID, adjust as necessary
+#define MQTT_TOPIC "sensor/data" // Example MQTT topic, adjust as necessary
+#define MQTT_USERNAME "username" // Example MQTT username, adjust as necessary
+#define MQTT_PASSWORD "password" // Example MQTT password, adjust as necessary
+#define MQTT_QOS 0 // Example MQTT QoS level, adjust as necessary
+#define MQTT_RETAINED false // Example MQTT retained message flag, adjust as necessary
+
+
 MPU6050_Reading sensor;
 MotorControl motor(MOTOR_PIN1, MOTOR_PIN2); // Example motor pins, adjust as necessary
 int motorSpeed = 0; // Variable to store motor speed
+MqttHelper mqtt(MQTT_SERVER, 1883, MQTT_CLIENT_ID); // Example MQTT server and client ID, adjust as necessary
 
 void setSpeedByPercent(int inputSpeedPercent); // Function prototype for setting motor speed
 void printSensorData(); // Function prototype for printing sensor data
@@ -47,10 +59,34 @@ void loop() {
     }
   }
 
+  
+
 
   // Print motor speed for debugging
   // Serial.print("Current Motor Speed: ");
   // Serial.println(motorSpeed);
+}
+
+void publishSensorDataToMQTT() {
+  // Read data from the MPU6050 sensor
+  sensor.readSensor();
+
+  // Create a JSON string with sensor data
+  String payload = "{";
+  payload += "\"acceleration_x\":" + String(sensor.getAccelerationX(), 2) + ",";
+  payload += "\"acceleration_y\":" + String(sensor.getAccelerationY(), 2) + ",";
+  payload += "\"acceleration_z\":" + String(sensor.getAccelerationZ(), 2) + ",";
+  payload += "\"gyro_x\":" + String(sensor.getGyroX(), 2) + ",";
+  payload += "\"gyro_y\":" + String(sensor.getGyroY(), 2) + ",";
+  payload += "\"gyro_z\":" + String(sensor.getGyroZ(), 2);
+  payload += "}";
+
+  // Publish the payload to the MQTT server
+  mqtt.publish("sensor/data", payload.c_str());
+
+  // Debugging output
+  Serial.println("Published sensor data to MQTT:");
+  Serial.println(payload);
 }
 
 bool isOnTrack() {
