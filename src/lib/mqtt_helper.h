@@ -2,8 +2,8 @@
 #define MQTT_HELPER_H
 
 #include <functional>
-#include <AsyncMqttClient.h>
 #include <WiFi.h>
+#include <PubSubClient.h>
 
 class MqttHelper {
 public:
@@ -17,6 +17,7 @@ public:
     void publish(const String& topic, const String& message, int qos = 0, bool retained = false);
     void subscribe(const String& topic, int qos = 0);
     void setMessageCallback(MessageCallback callback);
+    void loop(); // Call this in the main loop to maintain the connection
 
 private:
     String serverAddress_;
@@ -24,12 +25,12 @@ private:
     String clientId_;
     String username_;
     String password_;
-    AsyncMqttClient mqttClient_;
+    WiFiClient wifiClient_;
+    PubSubClient mqttClient_;
     MessageCallback messageCallback_;
 
-    void onMqttConnect(bool sessionPresent);
-    void onMqttDisconnect(AsyncMqttClientDisconnectReason reason);
-    void onMqttMessage(char* topic, char* payload, AsyncMqttClientMessageProperties properties, size_t len, size_t index, size_t total);
+    void onMqttMessage(char* topic, byte* payload, unsigned int length);
+    void reconnect();
 };
 
 #endif // MQTT_HELPER_H
