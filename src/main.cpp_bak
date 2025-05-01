@@ -1,0 +1,199 @@
+#include <Arduino.h>
+#include "lib/MPU6050_Reading.h" // Adjust the path as necessary
+#include "lib/Motor_Control.h"   // Adjust the path as necessary
+// #include "lib/mqtt_helper.h"     // Adjust the path as necessary
+// #include "lib/wifi_helper.h"     // Include the WiFiHelper header
+// #include "lib/server_helper.h"   // Include the ServerHelper header
+#include "ArduinoJson.h" // Include ArduinoJson for JSON handling
+#include "PubSubClient.h" // Include PubSubClient for MQTT handling
+#include <WiFi.h>       // Include WiFi library for ESP32
+
+#define ON_TRACK_PIN 15 // Pin to read the state of the ON_TRACK signal
+#define MOTOR_PIN1 13   // Pin for motor control (example pin, adjust as necessary)
+#define MOTOR_PIN2 12   // Pin for motor control (example pin, adjust as necessary)
+
+#define WIFI_SSID "XQuaniPhone"       // Replace with your Wi-Fi SSID
+#define WIFI_PASSWORD "12345677" // Replace with your Wi-Fi password
+
+#define MQTT_SERVER "172.20.10.3" // Example MQTT server, adjust as necessary
+#define MQTT_PORT 1883                    // Example MQTT port, adjust as necessary
+#define MQTT_CLIENT_ID "SlotCarChamp"     // Example MQTT client ID, adjust as necessary
+#define MQTT_TOPIC "/sensor/data"          // Example MQTT topic, adjust as necessary
+#define MQTT_USERNAME ""            // Example MQTT username, adjust as necessary
+#define MQTT_PASSWORD ""      // Example MQTT password, adjust as necessary
+#define MQTT_QOS 2                        // Example MQTT QoS level, adjust as necessary
+#define MQTT_RETAINED false               // Example MQTT retained message flag, adjust as necessary
+
+MPU6050_Reading sensor;
+MotorControl motor(MOTOR_PIN1, MOTOR_PIN2); // Example motor pins, adjust as necessary
+int motorSpeed = 0;                         // Variable to store motor speed
+// WiFiHelper wifi(WIFI_SSID, WIFI_PASSWORD);    
+WiFiClient wifiClient;   // Create an instance of WiFiHelper
+// MqttHelper mqtt(MQTT_SERVER, 1883, MQTT_CLIENT_ID); // Example MQTT server and client ID, adjust as necessary
+// ServerHelper server(80); // Create a server on port 80
+PubSubClient mqttClient(wifiClient); // Create a PubSubClient instance for MQTT
+
+void setSpeedByPercent(int inputSpeedPercent); // Function prototype for setting motor speed
+void printSensorData();                        // Function prototype for printing sensor data
+void onTrackSafety();                          // Function prototype for printing ON_TRACK state
+bool isOnTrack();         
+void publishSensorDataToMQTT(MPU6050_Reading sensor);
+void reconnectMQTT();
+
+void setupWiFi() {
+  delay(10);
+  Serial.println("Connecting to WiFi...");
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+  while (WiFi.status() != WL_CONNECTED) {
+      delay(500);
+      Serial.print(".");
+  }
+  Serial.println("\nWiFi connected");
+}
+
+void setup() {
+    Serial.begin(115200);
+    while (!Serial) {
+        delay(10);
+    }
+
+    // Connect to Wi-Fi
+    // wifi.connect();
+
+    // Initialize the server
+    // server.setStartCallback([]() {
+    //     Serial.println("Start button pressed");
+    //     motor.forward(20); // Example: Start motor at full speed
+    // });
+    // server.setStopCallback([]() {
+    //     Serial.println("Stop button pressed");
+    //     motor.stop(); // Example: Stop motor
+    // });
+    // server.setSpeedCallback([](int speed) {
+    //     Serial.println("Set speed to: " + String(speed));
+    //     motor.forward(map(speed, 0, 100, 0, 255)); // Map speed to motor range
+    // });
+    // server.begin();
+
+    // Initialize other components
+    sensor.begin();
+    pinMode(ON_TRACK_PIN, INPUT_PULLDOWN);
+}
+
+void loop() {
+  // if (!wifi.isConnected()) {
+  //   Serial.println("Wi-Fi disconnected. Reconnecting...");
+  //   wifi.connect(); // Reconnect to Wi-Fi if disconnected
+  // }
+  reconnectMQTT();
+  // mqtt.loop(); // Call the MQTT loop to maintain the connection
+
+  // Check the ON_TRACK signal and control the motor accordingly
+  // If the ON_TRACK signal is LOW, stop the motor
+  // onTrackSafety();
+
+  sensor.readSensor(); // Read sensor data
+
+  // Start the web server and handle incoming requests
+  // server.handleClient();// Update real-time data
+  // server.updateMotorSpeed(motorSpeed); // Update motor speed
+  // server.updateSensorData("AccelX: " + String(sensor.getAccelerationX(), 2)); // Update sensor data
+
+
+  publishSensorDataToMQTT(sensor); // Publish sensor data to MQTT
+  // readMqttMotorStop();
+  delay(10);
+}
+
+void reconnectMQTT() {
+  while (!mqttClient.connected()) {
+      Serial.println("Connecting to MQTT...");
+      if (mqttClient.connect("ESP32Client")) {
+          Serial.println("Connected to MQTT broker");
+      } else {
+          Serial.print("Failed to connect, rc=");
+          Serial.print(mqttClient.state());
+          Serial.println(" Retrying in 5 seconds...");
+          delay(5000);
+      }
+  }
+}
+
+void publishSensorDataToMQTT(MPU6050_Reading sensor) {  
+  String payload = "{";
+  // payload += "\"accel_x\":" + String(sensor.getAccelerationX) + ",";
+  // payload += "\"accel_y\":" + String(sensor.acceleration.y) + ",";
+  // payload += "\"accel_z\":" + String(sensor.acceleration.z) + ",";
+  // payload += "\"gyro_x\":" + String(sensor.gyro.x) + ",";
+  // payload += "\"gyro_y\":" + String(g.gyro.y) + ",";
+  // payload += "\"gyro_z\":" + String(g.gyro.z) + ",";
+  // payload += "\"temp\":" + String(temp.temperature);
+  payload += "}";
+
+  mqttClient.publish(MQTT_TOPIC, payload.c_str());
+  Serial.println("Published: " + payload);
+}
+
+bool isOnTrack() {
+  // Read the digital value of pin 15 (ON_TRACK_PIN)
+  int onTrackSignal = digitalRead(ON_TRACK_PIN);
+
+  // Return true if the signal is HIGH, false otherwise
+  return onTrackSignal == HIGH;
+}
+
+// Function to check the ON_TRACK signal and control the motor accordingly
+// This function is called in the loop to ensure the motor is controlled based on the ON_TRACK signal
+void onTrackSafety() {
+  // Static variable to store the last state of ON_TRACK_PIN
+  static int lastOnTrackState = -1;
+
+  // Get the current ON_TRACK state using isOnTrack()
+  int onTrackState = isOnTrack();
+
+  // Only process if the state has changed
+  if (onTrackState != lastOnTrackState) {
+    lastOnTrackState = onTrackState; // Update the last state
+
+    if (onTrackState) {
+      Serial.println("ON_TRACK signal is HIGH. Motor is ON.");
+      // Delay to allow the motor to start
+      delay(1000); // Adjust the delay as necessary
+
+    } else {
+      Serial.println("ON_TRACK signal is LOW. Motor is OFF.");
+      motor.stop(); // Stop the motor if ON_TRACK signal is LOW
+    }
+  }
+}
+
+void printSensorData() {
+  // Read data from the MPU6050 sensor
+  sensor.readSensor();
+  Serial.print("Acceleration X: ");
+  Serial.print(sensor.getAccelerationX(), 2);
+  Serial.print(" m/s^2, ");
+  Serial.print("Y: ");
+  Serial.print(sensor.getAccelerationY(), 2);
+  Serial.print(" m/s^2, ");
+  Serial.print("Z: ");
+  Serial.print(sensor.getAccelerationZ(), 2);
+  Serial.print(" m/s^2, ");
+  Serial.print("Gyro X: ");
+  Serial.print(sensor.getGyroX(), 2);
+  Serial.print(" °/s, ");
+  Serial.print("Y: ");
+  Serial.print(sensor.getGyroY(), 2);
+  Serial.print(" °/s, ");
+  Serial.print("Z: ");
+  Serial.print(sensor.getGyroZ(), 2);
+  Serial.println(" °/s");
+}
+
+void setSpeedByPercent(int inputSpeedPercent) {
+  motorSpeed = map(inputSpeedPercent, 0, 100, 0, 255); // Map percentage to 0-255 range
+  motor.forward(motorSpeed);                           // Set motor speed
+  Serial.print("Motor Speed set to: ");
+  Serial.print(inputSpeedPercent);
+  Serial.println(" %");
+}
